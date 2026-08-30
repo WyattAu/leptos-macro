@@ -1,0 +1,21 @@
+[package]
+name = "leptos-macro"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Procedural macros for Leptos components — boilerplate reduction for lib.rs, feature flags, and prop defaults"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/WyattAu/leptos-macro"
+keywords = ["leptos", "proc-macro", "components", "frontend"]
+categories = ["development-tools::procedural-macro-helpers"]
+readme = "README.md"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
