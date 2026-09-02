@@ -130,3 +130,87 @@ fn impl_leptos_component(input: &DeriveInput) -> TokenStream2 {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proc_macro2::TokenStream as TokenStream2;
+    use quote::quote;
+
+    fn expand_derive(input: TokenStream2) -> TokenStream2 {
+        let input: DeriveInput = syn::parse2(input).expect("valid DeriveInput");
+        impl_leptos_component(&input)
+    }
+
+    #[test]
+    fn named_fields_struct_generates_builder() {
+        let input = quote! {
+            struct MyComponent {
+                name: String,
+                enabled: bool,
+            }
+        };
+        let expanded = expand_derive(input);
+        let code = expanded.to_string();
+        assert!(code.contains("fn builder"), "should generate builder method");
+        assert!(code.contains("MyComponent"), "should reference struct name");
+    }
+
+    #[test]
+    fn struct_with_prop_default_attr() {
+        let input = quote! {
+            struct MyComponent {
+                name: String,
+                #[prop(default = false)]
+                enabled: bool,
+            }
+        };
+        let expanded = expand_derive(input);
+        let code = expanded.to_string();
+        assert!(code.contains("fn builder"), "should generate builder method");
+    }
+
+    #[test]
+    fn struct_with_component_attr_filtered() {
+        let input = quote! {
+            struct MyComponent {
+                #[component]
+                children: Option<String>,
+                name: String,
+            }
+        };
+        let expanded = expand_derive(input);
+        let code = expanded.to_string();
+        assert!(code.contains("fn builder"), "should generate builder");
+    }
+
+    #[test]
+    fn generics_preserved() {
+        let input = quote! {
+            struct MyComponent<T> {
+                value: T,
+            }
+        };
+        let expanded = expand_derive(input);
+        let code = expanded.to_string();
+        assert!(code.contains("MyComponent"), "should preserve generic struct name");
+    }
+
+    #[test]
+    fn expected_output_matches() {
+        let input = quote! {
+            struct TestComp {
+                field: String,
+            }
+        };
+        let expanded = expand_derive(input);
+        let expected = quote! {
+            impl TestComp {
+                pub fn builder() -> TestComp {
+                    TestComp
+                }
+            }
+        };
+        assert_eq!(expanded.to_string(), expected.to_string());
+    }
+}
