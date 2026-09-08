@@ -1,24 +1,56 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
-//! Derive macro for Leptos component boilerplate.
+//! Procedural macros for personal Leptos component patterns.
+//!
+//! # Scope
+//!
+//! This crate is a small boilerplate saver for personal component patterns:
+//! it generates `impl`-block scaffolding (a `builder()` entry point) for
+//! props structs while tolerating Leptos' `#[prop(...)]` attributes. It is
+//! small by design and intentionally stays that way.
+//!
+//! It complements — not competes with — the official Leptos macros:
+//! `#[component]` and `#[server]` remain the source of truth for component
+//! definitions, reactivity, and server functions. Use this crate only for
+//! the repetitive `impl`-block glue around your own props conventions.
+//!
+//! # What it does NOT do
+//!
+//! - No prop-default codegen: `#[prop(default = ...)]` attributes are
+//!   recognized (and left for Leptos to honor) but this macro emits no
+//!   `Default` impls or builder setters — generated inherent methods could
+//!   collide with yours, so that is deliberately out of scope.
+//! - No component registration, routing, or server-function support.
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput, Fields};
 
-/// Derive macro for Leptos component boilerplate.
+/// Derive macro for Leptos props-struct boilerplate.
 ///
-/// Generates module declarations, feature flag setup, and prop default implementations.
+/// Generates an `impl` block with a `builder()` entry point for a struct
+/// with named fields. Fields carrying Leptos' `#[component]` attribute
+/// (e.g. `children`) are skipped; `#[prop(default = ...)]` attributes are
+/// tolerated and preserved for Leptos to honor. Generics and where clauses
+/// are preserved.
+///
+/// Scope: a small, personal-patterns helper that complements the official
+/// `#[component]` / `#[server]` macros — not a replacement for them. Kept
+/// small by design: no `Default` impls, no setters, no codegen beyond the
+/// `impl` scaffold.
 ///
 /// # Usage
 ///
 /// ```ignore
+/// use leptos_macros::LeptosComponent;
+///
 /// #[derive(LeptosComponent)]
-/// #[component]
-/// fn MyComponent(prop_a: String, #[prop(default = false)] enabled: bool) -> impl IntoView {
-///     view! { <div>{prop_a}</div> }
+/// pub struct CardProps {
+///     pub title: String,
+///     #[prop(default = false)]
+///     pub collapsed: bool,
 /// }
 /// ```
 #[proc_macro_derive(LeptosComponent, attributes(component))]
