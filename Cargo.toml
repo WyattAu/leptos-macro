@@ -20,3 +20,7 @@ quote = "1"
 syn = { version = "2", features = ["full"] }
 
 [dev-dependencies]
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
