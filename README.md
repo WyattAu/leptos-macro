@@ -30,25 +30,29 @@ safe, so the macro stays minimal on purpose.
 ```rust,ignore
 use leptos_macros::LeptosComponent;
 
-#[derive(LeptosComponent)]
+#[derive(Default, LeptosComponent)]
 pub struct CardProps {
     pub title: String,
     #[prop(default = false)]
     pub collapsed: bool,
 }
+
+let props = CardProps::builder(); // == CardProps::default()
 ```
 
-The macro generates an `impl` block with a `builder()` entry point,
-preserving generics and where clauses. Fields with Leptos' `#[component]`
-attribute (e.g. `children`) are skipped.
+The macro generates an `impl` block with a `builder()` entry point that
+returns `Self::default()` — the struct must implement `Default` (the macro
+deliberately does not emit the `Default` impl itself). Generics and where
+clauses are preserved. Fields with Leptos' `#[component]` attribute (e.g.
+`children`) are tolerated.
 
 ## Comparison
 
 | Manual boilerplate | With `leptos-macro` |
 |--------------------|---------------------|
-| ~30 lines per component | 1 derive + attribute |
-| Easy to forget a field | All props handled automatically |
-| Inconsistent defaults | Declarative `#[prop(default = ...)]` |
+| Hand-written constructor plumbing | 1 derive, `builder()` entry point |
+| Forgetting `Default` on a props struct | Compile error via `where Self: Default` |
+| Ad-hoc attribute handling | `#[prop(...)]` / `#[component]` tolerated |
 
 ## License
 

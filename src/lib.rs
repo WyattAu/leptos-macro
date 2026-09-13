@@ -6,8 +6,9 @@
 //! # Scope
 //!
 //! This crate is a small boilerplate saver for personal component patterns:
-//! it generates `impl`-block scaffolding (a `builder()` entry point) for
-//! props structs while tolerating Leptos' `#[prop(...)]` attributes. It is
+//! it generates a `builder()` entry point for props structs (returning
+//! `Self::default()`, so the struct must implement `Default`) while
+//! tolerating Leptos' `#[prop(...)]` and `#[component]` attributes. It is
 //! small by design and intentionally stays that way.
 //!
 //! It complements — not competes with — the official Leptos macros:
@@ -26,15 +27,16 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput, Fields};
+use syn::{DeriveInput, Fields, parse_macro_input};
 
 /// Derive macro for Leptos props-struct boilerplate.
 ///
-/// Generates an `impl` block with a `builder()` entry point for a struct
-/// with named fields. Fields carrying Leptos' `#[component]` attribute
-/// (e.g. `children`) are skipped; `#[prop(default = ...)]` attributes are
-/// tolerated and preserved for Leptos to honor. Generics and where clauses
-/// are preserved.
+/// Generates a `builder()` entry point that returns `Self::default()` —
+/// the struct must implement `Default` (this macro does not emit the
+/// `Default` impl itself). Fields carrying Leptos' `#[component]`
+/// attribute (e.g. `children`) are tolerated; `#[prop(default = ...)]`
+/// attributes are tolerated and preserved for Leptos to honor. Generics
+/// and where clauses are preserved.
 ///
 /// Scope: a small, personal-patterns helper that complements the official
 /// `#[component]` / `#[server]` macros — not a replacement for them. Kept
@@ -46,14 +48,16 @@ use syn::{parse_macro_input, DeriveInput, Fields};
 /// ```ignore
 /// use leptos_macros::LeptosComponent;
 ///
-/// #[derive(LeptosComponent)]
+/// #[derive(Default, LeptosComponent)]
 /// pub struct CardProps {
 ///     pub title: String,
 ///     #[prop(default = false)]
 ///     pub collapsed: bool,
 /// }
+///
+/// let props = CardProps::builder();
 /// ```
-#[proc_macro_derive(LeptosComponent, attributes(component))]
+#[proc_macro_derive(LeptosComponent, attributes(component, prop))]
 pub fn leptos_component_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let expanded = impl_leptos_component(&input);
@@ -64,106 +68,28 @@ fn impl_leptos_component(input: &DeriveInput) -> TokenStream2 {
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
-    let fields = match &input.data {
+    match &input.data {
         syn::Data::Struct(data) => match &data.fields {
-            Fields::Named(fields) => &fields.named,
+            Fields::Named(_) => {}
             _ => panic!("LeptosComponent only supports structs with named fields"),
         },
         _ => panic!("LeptosComponent only supports structs"),
-    };
-
-    let props = fields.iter().filter(|f| {
-        !f.attrs.iter().any(|a| a.path().is_ident("component"))
-    }).collect::<Vec<_>>();
-
-    let _prop_names: Vec<_> = props.iter().map(|f| &f.ident).collect();
-
-    let _defaults: Vec<_> = props.iter().filter_map(|f| {
-        let ident = &f.ident;
-        let ty = &f.ty;
-
-        let default_attr = f.attrs.iter().find(|a| a.path().is_ident("prop"))?;
-        let meta = &default_attr.meta;
-
-        if let syn::Meta::List(list) = meta {
-            let mut default_value = None;
-            let _ = list.parse_nested_meta(|meta| {
-                if meta.path.is_ident("default") {
-                    let value = meta.value()?;
-                    let lit: syn::Expr = value.parse()?;
-                    default_value = Some(lit);
-                    Ok(())
-                } else {
-                    Err(meta.error("expected `default`"))
-                }
-            });
-            if let Some(_val) = default_value {
-                return Some(quote! {
-                    pub #ident: #ty
-                });
-            }
-        }
-        Some(quote! {
-            pub #ident: #ty
-        })
-    }).collect();
-
-    let _prop_defaults: Vec<_> = props.iter().filter_map(|f| {
-        let ident = &f.ident;
-        let ty = &f.ty;
-
-        let default_attr = f.attrs.iter().find(|a| a.path().is_ident("prop"))?;
-        let meta = &default_attr.meta;
-
-        if let syn::Meta::List(list) = meta {
-            let mut default_value = None;
-            let _ = list.parse_nested_meta(|meta| {
-                if meta.path.is_ident("default") {
-                    let value = meta.value()?;
-                    let lit: syn::Expr = value.parse()?;
-                    default_value = Some(lit);
-                    Ok(())
-                } else {
-                    Err(meta.error("expected `default`"))
-                }
-            });
-            return Some(quote! {
-                pub fn #ident(mut self, val: #ty) -> Self {
-                    self.#ident = val;
-                    self
-                }
-            });
-        }
-        None
-    }).collect();
-
-    let _builder_methods: Vec<_> = props.iter().filter_map(|f| {
-        let ident = &f.ident;
-        let ty = &f.ty;
-
-        let has_default = f.attrs.iter().any(|a| a.path().is_ident("prop"));
-        if has_default {
-            Some(quote! {
-                pub fn #ident(mut self, val: #ty) -> Self {
-                    self.#ident = val;
-                    self
-                }
-            })
-        } else {
-            None
-        }
-    }).collect();
+    }
 
     quote! {
         impl #impl_generics #name #ty_generics #where_clause {
-            pub fn builder() -> #name {
-                #name
+            pub fn builder() -> Self
+            where
+                Self: Default,
+            {
+                Self::default()
             }
         }
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::*;
     use proc_macro2::TokenStream as TokenStream2;
@@ -184,7 +110,10 @@ mod tests {
         };
         let expanded = expand_derive(input);
         let code = expanded.to_string();
-        assert!(code.contains("fn builder"), "should generate builder method");
+        assert!(
+            code.contains("fn builder"),
+            "should generate builder method"
+        );
         assert!(code.contains("MyComponent"), "should reference struct name");
     }
 
@@ -199,7 +128,10 @@ mod tests {
         };
         let expanded = expand_derive(input);
         let code = expanded.to_string();
-        assert!(code.contains("fn builder"), "should generate builder method");
+        assert!(
+            code.contains("fn builder"),
+            "should generate builder method"
+        );
     }
 
     #[test]
@@ -225,7 +157,10 @@ mod tests {
         };
         let expanded = expand_derive(input);
         let code = expanded.to_string();
-        assert!(code.contains("MyComponent"), "should preserve generic struct name");
+        assert!(
+            code.contains("MyComponent"),
+            "should preserve generic struct name"
+        );
     }
 
     #[test]
@@ -238,11 +173,32 @@ mod tests {
         let expanded = expand_derive(input);
         let expected = quote! {
             impl TestComp {
-                pub fn builder() -> TestComp {
-                    TestComp
+                pub fn builder() -> Self
+                where
+                    Self: Default,
+                {
+                    Self::default()
                 }
             }
         };
         assert_eq!(expanded.to_string(), expected.to_string());
+    }
+
+    #[test]
+    fn builder_requires_default_bound() {
+        let input = quote! {
+            struct TestComp {
+                field: String,
+            }
+        };
+        let expanded = expand_derive(input).to_string();
+        assert!(
+            expanded.contains("Self : Default"),
+            "builder() should carry `where Self: Default` so it only exists on Default structs"
+        );
+        assert!(
+            expanded.contains("Self :: default ()"),
+            "builder() should construct via Self::default()"
+        );
     }
 }
