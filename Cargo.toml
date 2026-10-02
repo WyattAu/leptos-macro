@@ -24,3 +24,6 @@ syn = { version = "2", features = ["full"] }
 [lints.clippy]
 unwrap_used = "warn"
 expect_used = "warn"
+
+[package.metadata.layers]
+tier = "L0"
